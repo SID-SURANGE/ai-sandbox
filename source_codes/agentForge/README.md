@@ -1,3 +1,5 @@
+> **Note:** This codebase has been modified to cater to the assignment for the Hugging Face Agent Course. It is a clone of the Hugging Face Space [First_agent_template](https://huggingface.co/spaces/agents-course/First_agent_template).
+
 
 # AgentForge: AI-Powered Assistant 
 

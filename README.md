@@ -86,3 +86,7 @@ An image captioning system powered by Meta's Llama 3.2 Vision model, accessed th
 - [Chat with GitHub Documentation](./source_codes/chat-with-gitrepo/readme.md)
 - [AgentForge Documentation](./source_codes/agentforge/README.md)
 - [Image Captioning Documentation](./source_codes/image-captioning/README.md)
+
+
+## License Agreement
+- [License Agreement](./LICENSE) - Review the terms and conditions governing the use, distribution, and modification of this project.
