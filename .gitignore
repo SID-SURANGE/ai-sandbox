@@ -83,3 +83,9 @@ dmypy.json
 # Logs and databases
 *.log
 *.sqlite
+
+# Image data
+data/
+
+# data folder in image captioning
+source_codes\image-captioning\data

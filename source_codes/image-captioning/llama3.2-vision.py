@@ -19,6 +19,7 @@ import os, base64
 import argparse
 from together import Together
 from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,23 +27,60 @@ load_dotenv()
 # Constants and Configuration
 IMAGE_PATH = r".\data\sample.jpg"  # Path to the input image
 MODEL_NAME = "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo"  # Model identifier
-MAX_TOKENS = 700  # Maximum number of tokens in the response
-TEMPERATURE = 0.18  # Controls randomness in generation (lower = more deterministic)
-TOP_P = 0.5  # Nucleus sampling parameter
-TOP_K = 10  # Top-k sampling parameter
+MAX_TOKENS = 200  # Maximum number of tokens in the response
+TEMPERATURE = 0.8  # Controls randomness in generation (lower = more deterministic)
+TOP_P = 0.8  # Nucleus sampling parameter
+TOP_K = 4  # Top-k sampling parameter
 REP_PENALTY = 1  # Repetition penalty
 STOP_SEQUENCES = ["<|eot_id|>", "<|eom_id|>"]  # Sequences to stop generation
 
 # Initialize the Together API client
 client = Together(api_key=os.getenv("TOGETHER_API_KEY"))
 
+class ImageCaptionResponse(BaseModel):
+    description: str
+    keywords: list[str]
+
+
+def call_model(messages):
+    """
+    Call the model to generate a response based on the provided messages.
+
+    Args:
+        messages (list): The messages to send to the model.
+
+    Returns:
+        str: The model's response as a string.
+    """
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        max_tokens=MAX_TOKENS,
+        temperature=TEMPERATURE,
+        top_p=TOP_P,
+        top_k=TOP_K,
+        repetition_penalty=REP_PENALTY,
+        stop=STOP_SEQUENCES,
+        stream=True
+    )
+
+    output = ""
+    for token in response:
+        if hasattr(token, 'choices') and token.choices:
+            try:
+                output += token.choices[0].delta.content
+            except (IndexError, AttributeError) as error:
+                print("Error extracting token content:", error)
+    return output
+
+
 def image_caption(image_path: str):
     """
     Generate a caption for the provided image using the Llama Vision model.
-    
+
     Args:
         image_path (str): Path to the image file to be captioned
-    
+
     Returns:
         None: Prints the generated caption and keywords
     """
@@ -51,14 +89,16 @@ def image_caption(image_path: str):
         encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
 
     # Define the prompt template for image captioning
-    prompt = """Describe the image in a short, concise and descriptive manner.
-                Additionally, list 5 major keywords that would aptly describe the image details.
-                Response format should strictly be a JSON object in a single paragraph without newlines,
-                for example: 
-                    {"response":"<image description>",
-                    "keywords":["keyword1","keyword2","keyword3","keyword4","keyword5"]}
-             """
-        
+    prompt = """Describe the image, focusing on barista tasks, tools, or coffee preparation processes. Highlight specific actions and techniques visible and also fetch 5 relevant keywords describing the scene or technique or actions as seen inthe image. Only use relevant technical terms.
+
+    Provide your response in the following JSON format:
+    {
+        "description": "A concise description in 3 sentences.",
+        "keywords": ["keyword1", "keyword2", "keyword3", .... "keyword5"]
+    }
+
+    Ensure the output is strictly valid JSON without any additional text or explanations."""
+
     # Create the image URL with base64 encoding
     image_url = f"data:image/png;base64,{encoded_image}"
 
@@ -73,32 +113,22 @@ def image_caption(image_path: str):
         }
     ]
 
-    # Generate the caption using the model
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=messages,
-        max_tokens=MAX_TOKENS,
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
-        top_k=TOP_K,
-        repetition_penalty=REP_PENALTY,
-        stop=STOP_SEQUENCES,
-        stream=True
-    )
+    # Attempt to generate a valid JSON response
+    for attempt in range(3):
+        output = call_model(messages)
+        try:
+            # Validate the response using Pydantic
+            response_data = ImageCaptionResponse.model_validate_json(output)
+            print("Final output:", response_data)
+            break
+        except ValidationError as e:
+            print(f"Attempt {attempt + 1}: Invalid JSON response, retrying...")
+            if attempt == 2:
+                print("Failed to get a valid JSON response after 3 attempts.")
 
-    # Process the streaming response
-    output = ""
-    for token in response:
-        if hasattr(token, 'choices') and token.choices:
-            try:
-                output += token.choices[0].delta.content
-            except (IndexError, AttributeError) as error:
-                print("Error extracting token content:", error)
-    print("Final output:", output)
 
 # Script entry point
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description="Generate caption for an image.")
     parser.add_argument("--image_path", type=str, default=IMAGE_PATH,
                         help="Path to the image file. If not provided, a default image will be used.")
