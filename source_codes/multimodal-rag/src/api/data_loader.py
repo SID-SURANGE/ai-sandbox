@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 # local imports
 from src.loaders.text_loader import process_text, process_pdf, process_docx
 from src.loaders.image_loader import process_image
-from src.loaders.video_loader import process_video
+# from src.loaders.video_loader import process_video
 
 # Create a router for the parser endpoints
 router = APIRouter(tags=["data_loader"])
@@ -30,11 +30,11 @@ async def add_knowledge(request: Request, folder_path: str = "data") -> JSONResp
                 continue
                 
             file_type = file.suffix.lower()
-            if file_type == ".txt":
-                if process_text(file):
-                    processed_files["success"].append(str(file))
-                else:
-                    processed_files["failed"].append(str(file))
+            # if file_type == ".txt":
+            #     if process_text(file):
+            #         processed_files["success"].append(str(file))
+            #     else:
+            #         processed_files["failed"].append(str(file))
             # elif file_type == ".pdf":
             #     if process_pdf(file):
             #         processed_files["success"].append(str(file))
@@ -45,7 +45,7 @@ async def add_knowledge(request: Request, folder_path: str = "data") -> JSONResp
             #         processed_files["success"].append(str(file))
             #     else:
             #         processed_files["failed"].append(str(file))
-            elif file_type in [".jpg", ".jpeg", ".png"]:
+            if file_type in [".jpg", ".jpeg", ".png"]:
                 if process_image(file):
                     processed_files["success"].append(str(file))
                 else:
@@ -54,26 +54,28 @@ async def add_knowledge(request: Request, folder_path: str = "data") -> JSONResp
                 processed_files["unsupported"].append(str(file))
                 logging.info(f"Unsupported file type: {file}")
                 
+        # Prepare response message
+        total_files = len(processed_files["success"]) + len(processed_files["failed"]) + len(processed_files["unsupported"])
+        response_message = f"Processed {total_files} files:\n"
+        response_message += f"- Successfully processed: {len(processed_files['success'])} files\n"
+        response_message += f"- Failed to process: {len(processed_files['failed'])} files\n"
+        response_message += f"- Unsupported files: {len(processed_files['unsupported'])} files"
+        
         return JSONResponse(
+            status_code=200,
             content={
                 "status": "success",
-                "response": "File processing completed",
-                "data": {
-                    "processed": len(processed_files["success"]),
-                    "failed": len(processed_files["failed"]),
-                    "unsupported": len(processed_files["unsupported"]),
-                    "details": processed_files
-                }
-            },
-            status_code=200
+                "response": response_message,
+                "details": processed_files
+            }
         )
+            
     except Exception as e:
         logging.error(f"Error in add_knowledge: {str(e)}")
         return JSONResponse(
+            status_code=500,
             content={
                 "status": "error",
-                "response": "Error processing files",
-                "error_type": "internal_server_error"
-            },
-            status_code=500
+                "response": f"Error processing files: {str(e)}"
+            }
         )

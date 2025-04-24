@@ -1,33 +1,31 @@
-# third-party imports
-from PIL import Image
-import uuid
+# Standard library imports
 from pathlib import Path
 import logging
-import numpy as np  # Import NumPy
+import numpy as np
+import uuid
+import torch
 
-# local imports
-from utils.config import collection, image_model, FIXED_DIMENSION
-from utils.helpers import adjust_embedding_dimension
+# Third-party imports
+from PIL import Image
+
+# Local imports
+from utils.config import collection, clip_model, clip_processor, device
 from src.model import run_caption_model
 
 logger = logging.getLogger(__name__)
 
+def generate_id(prefix: str, filename: str) -> str:
+    """Generate a unique ID for an image."""
+    return f"{prefix}_{Path(filename).stem}_{uuid.uuid4().hex[:8]}"
 
 def process_image(file_path):
-    """
-    Process an image file, generate embeddings, and store in ChromaDB.
-
-    Args:
-        file_path (str): Path to the image file.
-    
-    Returns:
-        bool: True if successful, False otherwise
-    """
+    """Process an image file, generate embeddings using CLIP, and store in ChromaDB."""
     try:
         print(f"Processing image file: {file_path}\n")
         
         # Validate file exists
-        if not Path(file_path).exists():
+        file_path = Path(file_path)
+        if not file_path.exists():
             raise FileNotFoundError(f"Image file not found: {file_path}")
             
         # Try opening and validating image
@@ -35,46 +33,90 @@ def process_image(file_path):
             image = Image.open(file_path)
             image.verify()  # Verify it's a valid image
             image = Image.open(file_path)  # Reopen image after verification
+            
+            # Convert image to RGB mode if needed
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+                
         except Exception as e:
             raise ValueError(f"Invalid or corrupted image file: {str(e)}")
 
-        # Generate image embedding
+        # Generate image embedding using CLIP
         try:
-            # Convert image to RGB mode if it isn't already
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
+            # Process image for CLIP
+            inputs = clip_processor(images=image, return_tensors="pt").to(device)
             
-            # Use the proper method for CLIP model
-            embedding = image_model.encode(Image.fromarray(np.array(image)))
-            adjusted_embedding = adjust_embedding_dimension(embedding, FIXED_DIMENSION)
+            # Get image features
+            with torch.no_grad():
+                image_features = clip_model.get_image_features(**inputs)
+                
+            # Convert to numpy and normalize
+            embedding = image_features.cpu().numpy()[0]
+            embedding = embedding / np.linalg.norm(embedding)
+            
         except Exception as e:
             raise RuntimeError(f"Failed to generate image embedding: {str(e)}")
 
-        # Generate image description
+        # Generate image caption with fallback for errors
         try:
-            description = run_caption_model(image, file_path)
+            caption_data = run_caption_model(image, str(file_path))
+            print(f'Generated caption data: {caption_data} and its type {type(caption_data)}')
+            
+            # Handle case where caption_data is an error string
+            if isinstance(caption_data, str):
+                logger.warning(f"Caption model returned error string: {caption_data}")
+                description = "No description available"
+                keywords = ""
+            # Handle Pydantic model case
+            elif hasattr(caption_data, 'description'):
+                description = caption_data.description
+                keywords = ", ".join(caption_data.keywords) if caption_data.keywords else ""
+            # Handle dictionary case
+            elif isinstance(caption_data, dict):
+                description = caption_data.get('description', 'No description available')
+                keywords = ", ".join(caption_data.get('keywords', [])) if caption_data.get('keywords') else ""
+            else:
+                logger.warning(f"Unexpected caption data type: {type(caption_data)}")
+                description = "No description available"
+                keywords = ""
+                
         except Exception as e:
             logger.warning(f"Failed to generate image caption for {file_path}: {str(e)}")
             description = "No description available"
+            keywords = ""
 
-        # Add to ChromaDB
+        # Generate unique ID
+        image_id = generate_id("img", str(file_path))
+
+        # Convert to relative URL path for static file serving
+        relative_path = file_path.name  # Just use the filename since all files are in data directory
+        url_path = f"/data/{relative_path}"  # This will match the FastAPI static file mount point
+
+        # Print debug information
+        print(f"Debug - Processing image:")
+        print(f"Original path: {file_path}")
+        print(f"URL path: {url_path}")
+        print(f"Filename: {file_path.name}")
+
+        # Add to ChromaDB using unified schema
+        metadata = {
+            "content_type": "image",
+            "file_path": url_path,  # Store the URL path instead of file path
+            "filename": file_path.name,
+            "description": description,
+            "keywords": keywords  # Now a comma-separated string
+        }
+        print(f"Debug - Metadata being stored: {metadata}")
+
         try:
             collection.add(
-                documents=[str(file_path)],
-                embeddings=[adjusted_embedding],
-                metadatas=[{
-                    "type": "image",
-                    "filename": Path(file_path).name,
-                    "image_path": str(file_path),
-                    "description": description,
-                    "size": str(image.size),  # Convert tuple to string
-                    "format": image.format,
-                    "mode": image.mode,
-                }],
-                ids=[f"img_{uuid.uuid4()}"]
+                documents=[str(file_path)],  # Keep original file path as document
+                embeddings=[embedding.tolist()],  # Store CLIP embedding
+                metadatas=[metadata],
+                ids=[image_id]
             )
-            logger.info(f"Image file '{file_path}' processed and added to ChromaDB.")
-            print(f"Image file '{file_path}' processed and added to ChromaDB.")
+            
+            print(f"Successfully added image to ChromaDB with ID: {image_id}")
             return True
 
         except Exception as e:

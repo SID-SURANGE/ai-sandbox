@@ -1,156 +1,136 @@
-# local imports
-from utils.config import collection, text_model, image_model, FIXED_DIMENSION
-from utils.helpers import adjust_embedding_dimension
+# Standard library imports
+import logging
+from typing import Dict, List, Optional
+import numpy as np
+import torch
+from pathlib import Path
 
-def query_db(query_text, n_results=10):
+# Local imports
+from utils.config import (
+    collection,
+    text_model,
+    clip_model,
+    clip_processor,
+    device,
+    cross_encoder
+)
+
+logger = logging.getLogger(__name__)
+
+def query_db(query: str, limit: int = 5) -> List[Dict]:
     """
-    Enhanced query function handling all content types: text, image, frame, transcript, and pdf.
-
+    Query the vector database for relevant results using both text and image models.
+    
     Args:
-        query_text (str): The user's query text
-        n_results (int): Number of results to return
-
+        query (str): The search query
+        limit (int): Maximum number of results to return
+        
     Returns:
-        List[Dict]: Ranked results with metadata
+        List[Dict]: List of relevant results with their metadata
     """
-    print(f"\nProcessing query: {query_text}")
+    try:
+        logger.info(f"Querying database with: {query}")
+        
+        # Get text embedding for text content
+        text_query_embedding = text_model.encode(query).astype(np.float32)
+        
+        # Get CLIP embedding for image content
+        clip_inputs = clip_processor(text=[query], return_tensors="pt", padding=True).to(device)
+        
+        with torch.no_grad():
+            clip_features = clip_model.get_text_features(**clip_inputs)
+            clip_features = clip_features / clip_features.norm(dim=-1, keepdim=True)
+            clip_query_embedding = clip_features.cpu().numpy()[0].astype(np.float32)
 
-    # 1. Determine query type and intent
-    query_lower = query_text.lower()
-    visual_keywords = [
-        "show",
-        "look",
-        "visual",
-        "image",
-        "video",
-        "frame",
-        "picture",
-        "photo",
-        "see",
-        "demonstrate",
-        "illustrate"
-    ]
-
-    is_visual_query = any(keyword in query_lower for keyword in visual_keywords)
-
-    # 2. Generate query embedding based on type
-    if is_visual_query:
-        query_embedding = image_model.encode([query_text])[0]
-    else:
-        query_embedding = text_model.encode(query_text)
-
-    adjusted_embedding = adjust_embedding_dimension(query_embedding, FIXED_DIMENSION)
-
-    # 3. Query ChromaDB with increased initial results
-    results = collection.query(
-        query_embeddings=[adjusted_embedding],
-        n_results=n_results * 5,
-        include=["documents", "metadatas", "distances"],
-    )
-
-    print(f"\nRaw results count: {len(results['documents'][0])}")
-    print(f'results from chromadb - {results}')
-
-    # 4. Process and format results with type-specific handling
-    formatted_results = []
-    for doc, meta, distance in zip(results["documents"][0], results["metadatas"][0], results["distances"][0]):
-        # Calculate normalized similarity score
-        similarity_score = 1 - (distance / 2)
-
-        # Get content type
-        content_type = meta.get("type", "unknown")
-
-        # Apply type-specific thresholds
-        thresholds = {
-            "text": 0.45,  # Lower threshold for text as it's more direct
-            "image": 0.5,  # Medium threshold for images
-            "frame": 0.5,  # Medium threshold for video frames
-            "transcript": 0.4,  # Lower threshold for transcripts as they're more verbose
-        }
-
-        threshold = thresholds.get(content_type, 0.5)
-
-        if similarity_score > threshold:
-            result = {
-                "document": doc,
-                "type": content_type,
-                "file_name": meta.get("file_name"),
-                "similarity_score": similarity_score,
-                "timestamp": meta.get("timestamp"),
-            }
-
-            # Add type-specific information
-            if content_type == "frame":
-                result["frame_info"] = f"Frame at {meta.get('timestamp', 0):.2f}s"
-            elif content_type == "transcript":
-                result["chunk_index"] = meta.get("chunk_index", 0)
-            elif content_type == "image":
-                result["image_path"] = (
-                    doc  # For images, the document field contains the full file path that was stored during processing_image()
+        
+        # Query ChromaDB twice - once for each content type
+        text_results = collection.query(
+            query_embeddings=[text_query_embedding.tolist()],
+            where={"content_type": "text"},  # Filter for text content
+            n_results=limit,
+            include=["metadatas", "embeddings"]
+        )
+        
+        image_results = collection.query(
+            query_embeddings=[clip_query_embedding.tolist()],
+            where={"content_type": "image"},  # Filter for image content
+            n_results=limit,
+            include=["metadatas", "embeddings"]
+        )
+        
+        print("Debug - Image query results:")
+        print(f"Number of image results: {len(image_results['ids'])}")
+        print(f"Image metadatas: {image_results['metadatas']}")
+        
+        # Process text results
+        all_results = []
+        if text_results['ids']:
+            for idx, embedding in enumerate(text_results['embeddings'][0]):
+                meta = text_results['metadatas'][0][idx]
+                # Calculate similarity using text model embeddings
+                embedding = np.array(embedding, dtype=np.float32)  # Convert stored embedding to float32
+                similarity = np.dot(text_query_embedding, embedding) / (
+                    np.linalg.norm(text_query_embedding) * np.linalg.norm(embedding)
                 )
-
-            formatted_results.append(result)
-
-    # 5. Sort results with type-specific boosting
-    def sort_key(result):
-        base_score = result["similarity_score"]
-        content_type = result["type"]
-
-        # Apply type-specific boosts based on query type
-        if is_visual_query:
-            # Boost visual content for visual queries
-            if content_type in ["image", "frame"]:
-                base_score *= 1.3  # Higher boost for visual content
-            elif content_type in ["text", "transcript"]:
-                base_score *= 0.9  # Slight penalty for text content
-        else:
-            # Boost text content for text queries
-            if content_type in ["text", "transcript"]:
-                base_score *= 1.3  # Higher boost for text content
-            elif content_type in ["image", "frame"]:
-                base_score *= 0.9  # Slight penalty for visual content
-
-        return base_score
-
-    print(f'Unsorted formatted results - {formatted_results}')
-    formatted_results.sort(key=sort_key, reverse=True)
-    print(f'Sorted formatted result - {formatted_results}')
-
-    # 6. Ensure diverse results across all content types
-    final_results = []
-    type_counts = {
-        'text': 0, 
-        'image': 0, 
-        'frame': 0, 
-        'transcript': 0,
-        'pdf': 0  # Added pdf type
-    }
-    
-    # Calculate target count per type based on available types in results
-    available_types = set(result['type'] for result in formatted_results)
-    total_types = len(available_types)
-    target_per_type = max(1, n_results // total_types) if total_types > 0 else n_results
-    
-    # First pass: try to get target number from each type
-    for result in formatted_results:
-        curr_type = result['type']
-        # Initialize type count if not present
-        if curr_type not in type_counts:
-            type_counts[curr_type] = 0
+                
+                if similarity > 0.1:  # Threshold for text
+                    all_results.append({
+                        'content_type': 'text',
+                        'content': meta.get('description', ''),
+                        'file_path': meta.get('file_path', ''),
+                        'filename': Path(meta.get('file_path', '')).name,
+                        'similarity_score': float(similarity)
+                    })
+        
+        # Process image results
+        if image_results['ids']:
+            for idx, embedding in enumerate(image_results['embeddings'][0]):
+                meta = image_results['metadatas'][0][idx]
+                print(f"Debug - Processing image result {idx}:")
+                print(f"Metadata: {meta}")
+                
+                # Convert stored embedding to tensor for CLIP similarity
+                embedding = np.array(embedding, dtype=np.float32)  # Convert to float32 first
+                image_features = torch.tensor(embedding, dtype=torch.float32).unsqueeze(0).to(device)
+                image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+                
+                # Calculate similarity using CLIP's dot product
+                similarity = (100.0 * clip_features @ image_features.T).softmax(dim=-1)
+                similarity_score = similarity.cpu().numpy()[0][0]
+                
+                if similarity_score > 0.03:  # Threshold for images
+                    result = {
+                        'content_type': 'image',
+                        'file_path': meta.get('file_path', ''),  # This should be the URL path
+                        'filename': meta.get('filename', ''),    # Use filename from metadata
+                        'description': meta.get('description', ''),
+                        'similarity_score': float(similarity_score)
+                    }
+                    print(f"Debug - Adding image result: {result}")
+                    all_results.append(result)
+        
+        # Normalize similarity scores between content types
+        if all_results:
+            text_scores = [r['similarity_score'] for r in all_results if r['content_type'] == 'text']
+            image_scores = [r['similarity_score'] for r in all_results if r['content_type'] == 'image']
             
-        if type_counts[curr_type] < target_per_type:
-            final_results.append(result)
-            type_counts[curr_type] += 1
+            if text_scores:
+                text_max = max(text_scores)
+                for r in all_results:
+                    if r['content_type'] == 'text':
+                        r['similarity_score'] = r['similarity_score'] / text_max
             
-        if len(final_results) >= n_results:
-            break
-    
-    # Second pass: fill remaining slots with best remaining results
-    if len(final_results) < n_results:
-        remaining = [r for r in formatted_results if r not in final_results]
-        final_results.extend(remaining[: n_results - len(final_results)])
-
-    print(f"\nReturning {len(final_results)} results")
-    print("Result distribution:", type_counts)
-    print(f'Final results {final_results}')
-    return final_results
+            if image_scores:
+                image_max = max(image_scores)
+                for r in all_results:
+                    if r['content_type'] == 'image':
+                        r['similarity_score'] = r['similarity_score'] / image_max
+        
+        # Sort by normalized similarity score
+        all_results.sort(key=lambda x: x['similarity_score'], reverse=True)
+        print(f"Debug - Final results: {all_results}")
+        return all_results[:limit]
+        
+    except Exception as e:
+        logger.error(f"Error querying database: {str(e)}")
+        return []

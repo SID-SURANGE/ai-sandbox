@@ -47,3 +47,4 @@ data/
 TBD/
 chromadb/
 password_hash.py
+src/loaders/video_loader.py
