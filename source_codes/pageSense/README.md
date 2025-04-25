@@ -6,6 +6,16 @@
 
 ---
 
+## 🎥 Demo
+
+> See PageSense in action!<br>
+
+<div align='center'>
+<video src="./Demo.mp4" controls width="600" style="max-width: 100%; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.13);"></video>
+</div>
+
+---
+
 ## ✨ Features
 
 - 🧠 <b>Semantic Search</b>: Find what you remember, not just what you typed
@@ -100,11 +110,28 @@ PageSense consists of a Chrome extension (this repo) and a backend service that 
 - 🔗 [Qdrant Documentation](https://qdrant.tech/documentation/)
 - Embeddings are generated and indexed locally for privacy and speed.
 
+### 🗂️ How and When is the Qdrant Database Updated?
+
+- **Initial Indexing:**
+  - When you first install and run PageSense, all your existing Chrome history and bookmarks are indexed and stored as embeddings in the Qdrant database.
+
+- **Daily Automatic Updates:**
+  - PageSense runs a background task every 24 hours to check for new history items and bookmarks.
+  - Any new or changed items are embedded and added to Qdrant, keeping your search results fresh.
+
+- **Manual or On-Demand Updates:**
+  - If you reinstall or reset the extension, a full reindex will be triggered.
+  - You can also trigger a reindex by restarting the backend service.
+
+- **Privacy:**
+  - All data and embeddings remain on your device—nothing is sent to the cloud.
+
 ---
 
-## 📄 License
+> 🛠️ **Found a bug or have a suggestion?**
+> Please [open an issue](../../issues) or submit a PR—your feedback helps make PageSense more stable and reliable!
 
-[MIT License](../LICENSE)
+---
 
 <div align="center">
   <sub>Made with ❤️ by the PageSense Team</sub>
