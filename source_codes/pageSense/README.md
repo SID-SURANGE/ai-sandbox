@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="icon128.png" alt="PageSense Icon" width="96" height="96">
+  <img src="extension/icon128.png" alt="PageSense Icon" width="96" height="96">
   <h1>PageSense</h1>
   <p><b>🔍 Intelligent search for your Chrome history & bookmarks, powered by AI.</b></p>
 </div>
@@ -62,7 +62,7 @@ inkscape icon.svg --export-type=png --export-filename=icon128.png -w 128 -h 128
 
 ## 💡 Usage
 
-1. Click the <img src="icon16.png" width="16" style="vertical-align:middle"> PageSense icon in your Chrome toolbar
+1. Click the <img src="extension/icon16.png" width="16" style="vertical-align:middle"> PageSense icon in your Chrome toolbar
 2. Type your search (e.g., <i>"python async bookmarks"</i>)
 3. View results from your history and bookmarks, ranked by relevance
 
