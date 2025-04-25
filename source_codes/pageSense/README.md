@@ -6,11 +6,24 @@
 
 ---
 
-## 🎥 Demo
+## 📸 Screenshots & Demo
 
-> See PageSense in action!<br>
+> See PageSense in action!
 
-[▶️ Watch the demo video (MP4)](./Demo.mp4)
+<div align="center" style="display: flex; flex-direction: row; justify-content: center; gap: 24px;">
+  <div style="display: inline-block;">
+    <img src="static/Screenshot1.png" alt="PageSense Extension UI" width="340"><br>
+    <i>Extension Popup UI</i>
+  </div>
+  <div style="display: inline-block;">
+    <img src="static/Screenshot2.png" alt="PageSense Search Results" width="340"><br>
+    <i>Sample search query and results</i>
+  </div>
+</div>
+
+<p align="center">
+  <a href="static/DEMO.mp4">▶️ Watch the demo video (MP4)</a>
+</p>
 
 ---
 
