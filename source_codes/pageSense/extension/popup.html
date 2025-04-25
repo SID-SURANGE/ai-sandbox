@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <title>PageSense Semantic Search</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="ps-container">
+    <div class="ps-header">
+      <img src="icon48.png" alt="PageSense Icon" class="ps-header-icon" style="vertical-align: middle; width:32px; height:32px; margin-right:10px;">
+      <span class="ps-title">PageSense</span>
+      <span class="ps-title-underline"></span>
+      <button class="ps-close-btn" id="closeBtn" title="Close">&times;</button>
+    </div>
+    <form id="searchForm" class="ps-search-box">
+      <div class="search-input-wrapper">
+        <input id="searchInput" type="text" placeholder="Search history or bookmarks...">
+        <button type="button" id="clearBtn" title="Clear" style="display:none;">&#10005;</button>
+      </div>
+      <button id="searchBtn" type="submit" title="Search">🔍</button>
+    </form>
+    <div id="loadingIndicator" style="display:none; text-align:center; margin-top:10px;">
+      <span>Loading...</span>
+    </div>
+    <div id="results" class="ps-results">
+      <!-- Results will appear here -->
+    </div>
+    <div class="ps-footer-divider"></div>
+    <div class="ps-footer">
+      <span>Powered by AI</span>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

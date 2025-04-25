@@ -87,5 +87,12 @@ dmypy.json
 # Image data
 data/
 
+# data folder in pageSense
+source_codes/pageSense/qdrant_data
+
 # data folder in image captioning
-source_codes\image-captioning\data
+source_codes/image-captioning/data
+
+# data folder in multimodal-rag
+source_codes/multimodal-rag/data
+
