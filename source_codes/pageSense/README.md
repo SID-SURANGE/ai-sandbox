@@ -10,9 +10,7 @@
 
 > See PageSense in action!<br>
 
-<div align='center'>
-<video src="./Demo.mp4" controls width="600" style="max-width: 100%; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.13);"></video>
-</div>
+[▶️ Watch the demo video (MP4)](./Demo.mp4)
 
 ---
 
