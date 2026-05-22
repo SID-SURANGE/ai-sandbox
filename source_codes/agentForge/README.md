@@ -1,4 +1,4 @@
-> **Note:** This codebase has been modified to cater to the assignment for the Hugging Face Agent Course. It is a clone of the Hugging Face Space [First_agent_template](https://huggingface.co/spaces/agents-course/First_agent_template).
+> **Note:** Fork of the Hugging Face Agent Course [First_agent_template](https://huggingface.co/spaces/agents-course/First_agent_template). `smolagents`, Space tools, and model IDs may change over time — pin versions in a fresh venv if installs break.
 
 
 # AgentForge: AI-Powered Assistant 
@@ -16,8 +16,9 @@ AgentForge is an intelligent assistant powered by AI that combines powerful web 
 
 1. Clone this repository:
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/SID-SURANGE/AI-Sandbox.git
 cd AI-Sandbox/source_codes/agentForge
+```
 
 2. Install dependencies:
 ```bash
@@ -61,8 +62,6 @@ git push
 - `prompts.yaml`: Agent prompt templates
 - `requirements.txt`: Python dependencies
 - `.env.example`: Template for environment variables
-- `tools/`: Directory containing agent tools
-  - `final_answer.py`: Tool for generating final responses
-  - `visit_webpage.py`: Tool for web page interactions
-  - `web_search.py`: Tool for web searching
+- `tools/final_answer.py`: Final answer tool used by the agent
+- Web search and image generation are defined inline in `app.py` (smolagents + DuckDuckGo + HF Space tool)
 

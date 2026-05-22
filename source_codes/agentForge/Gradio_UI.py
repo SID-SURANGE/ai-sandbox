@@ -17,7 +17,6 @@ import mimetypes
 import os
 import re
 import shutil
-from tabnanny import verbose
 from typing import Optional
 import gradio as gr
 from smolagents.agent_types import AgentAudio, AgentImage, AgentText, handle_agent_output_types
