@@ -3,6 +3,7 @@ import logging
 # Third party imports
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import List, Dict, Optional
 from fastapi.responses import JSONResponse
 
 # Local application imports
@@ -13,17 +14,21 @@ from src.context_engine import get_contextualized_llm_response
 router = APIRouter(tags=["barista"])
 
 
-class Query(BaseModel):
-    query: str
+class Message(BaseModel):
+    role: str
+    content: str
 
+class QueryRequest(BaseModel):
+    query: str
+    history: Optional[List[Message]] = []
 
 @router.post("/ask-barista-bot")
-async def process_barista_query(user_query: Query) -> JSONResponse:
+async def process_barista_query(request: QueryRequest) -> JSONResponse:
     """
     Process a user query and return a contextualized response.
 
     Args:
-        user_query (Query): The query object containing the user's question.
+        request (QueryRequest): The query object containing the user's question and history.
 
     Returns:
         JSONResponse: The response containing the answer or error message.
@@ -33,7 +38,7 @@ async def process_barista_query(user_query: Query) -> JSONResponse:
     """
     try:
         # Input validation
-        query_text = user_query.query.strip()
+        query_text = request.query.strip()
         if not query_text:
             raise HTTPException(
                 status_code=400,
@@ -46,11 +51,13 @@ async def process_barista_query(user_query: Query) -> JSONResponse:
         # Get response from LLM
         response = await get_contextualized_llm_response(query_text)
         
+        # Return response
         return JSONResponse(
             content={
                 "status": "success",
-                "response": response,
-                "data": {
+                "response": {
+                    "llm_response": response.get("llm_response", ""),
+                    "display_results": response.get("display_results", []),
                     "query": query_text,
                 }
             },

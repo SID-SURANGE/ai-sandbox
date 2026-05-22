@@ -80,12 +80,10 @@ To use the image captioning models, run the Python files directly:
 Replace `your_image.jpg` with the actual filename of your image in the `data` directory.
 
 ## Input Data
-
 Place your images in the `data` directory. Supported image formats:
 - JPEG/JPG
 - PNG
 - Other common image formats supported by PIL
-
 
 ## Note
 - Ensure you have sufficient disk space for model downloads

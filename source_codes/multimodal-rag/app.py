@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 import logging
 import chromadb
+import os
 
 # local imports
 from utils.custom_styling import apply_custom_css
@@ -32,6 +33,12 @@ def initialize_session_state():
         st.session_state.doc_loaded = False
     if "files_processed" not in st.session_state:
         st.session_state.files_processed = False
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+def clear_chat():
+    st.session_state.conversation_history = []
+    st.session_state.messages = []
 
 # --- Caching Decorators ---
 @st.cache_resource
@@ -125,44 +132,183 @@ def initialize_chat_history():
     if "conversation_history" not in st.session_state:
         st.session_state.conversation_history = []
 
+def display_search_results(results):
+    """Display search results in a clean format with images."""
+    if not results:
+        return
+        
+    st.write("---")
+    st.subheader("Related Information")
+    
+    # Base paths
+    data_dir = Path("data").resolve()
+    st.write(f"Debug - Data directory: {data_dir}")
+    
+    # Verify data directory exists
+    if not data_dir.exists():
+        st.error(f"Data directory not found: {data_dir}")
+        return
+        
+    # List files in data directory
+    st.write("Debug - Files in data directory:")
+    for file in data_dir.glob("*"):
+        if file.is_file():
+            st.write(f"- {file.name} ({file.stat().st_size} bytes)")
+    
+    for result in results:
+        st.write(f"Source: {result.get('filename', 'unknown')}")
+        
+        if result.get('content_type') == 'image':
+            try:
+                # Get the filename
+                filename = result.get('filename')
+                if not filename:
+                    st.error("No filename in result")
+                    continue
+                
+                st.write(f"Debug - Processing image: {filename}")
+                    
+                # Try local file path first
+                local_path = data_dir / filename
+                st.write(f"Debug - Full local path: {local_path}")
+                st.write(f"Debug - Path exists: {local_path.exists()}")
+                st.write(f"Debug - Is file: {local_path.is_file() if local_path.exists() else 'N/A'}")
+                
+                if local_path.exists() and local_path.is_file():
+                    st.write(f"Debug - File size: {local_path.stat().st_size} bytes")
+                    try:
+                        st.image(str(local_path), caption=result.get('description', ''))
+                        st.write("Debug - Successfully displayed local image")
+                    except Exception as e:
+                        st.error(f"Error displaying local image: {str(e)}")
+                else:
+                    st.error(f"Local file not found or not accessible: {local_path}")
+                    
+                    # Try API URL as fallback
+                    api_path = result.get('file_path', '')
+                    if api_path:
+                        api_url = "http://localhost:8000"
+                        full_url = f"{api_url}{api_path}"
+                        st.write(f"Debug - Trying API URL: {full_url}")
+                        
+                        try:
+                            response = requests.head(full_url)
+                            st.write(f"Debug - API response status: {response.status_code}")
+                            st.write(f"Debug - API response headers: {dict(response.headers)}")
+                            
+                            if response.status_code == 200:
+                                st.image(full_url, caption=result.get('description', ''))
+                                st.write("Debug - Successfully displayed API image")
+                            else:
+                                st.error(f"API URL not accessible (status {response.status_code}): {full_url}")
+                        except Exception as e:
+                            st.error(f"Error accessing API URL: {str(e)}")
+                    else:
+                        st.error("No API path available")
+                
+            except Exception as e:
+                st.error(f"Error displaying image: {str(e)}")
+                st.write("Debug - Result data:", result)
+        
+        st.write(result.get('description', ''))
+        st.write("---")
+
 def generate_response(prompt, history):
-    """
-    Generate bot response and update conversation history.
-    """
-    history.append({"role": "user", "content": prompt})
+    """Generate bot response and update conversation history."""
     try:
-        item = {"query": prompt}
-        headers = {"Content-Type": "application/json"}
-        with st.spinner("Processing your query..."):
+        with st.spinner("Thinking... 🤔"):
             response = requests.post(
                 API_CONFIG["BARISTA_URL"],
-                json=item,
-                headers=headers,
-                timeout=600,
+                json={"query": prompt, "history": history},
+                timeout=600
             )
-            response.raise_for_status()
-            response_data = response.json()
-            if response_data["status"] == "success":
-                bot_message = response_data["response"]
-            else:
-                bot_message = response_data.get("response", "Sorry, I couldn't process that.")
-    except requests.exceptions.RequestException as e:
-        bot_message = "I'm having trouble processing your request. Please try again later."
-        logging.error(f"API request failed: {str(e)}")
-    history.append({"role": "assistant", "content": bot_message})
-    return bot_message, history
+            
+            print("\n=== API Response ===")
+            print(f"Status Code: {response.status_code}")
+            print(f"Raw Response: {response.text}")
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                print("\n=== Parsed Response Data ===")
+                print(f"Full response_data: {response_data}")
+                
+                # Extract LLM response and display results from the correct structure
+                llm_response = response_data.get("response", {}).get("llm_response")
+                display_results = response_data.get("response", {}).get("display_results", [])
+                
+                if not llm_response:
+                    st.error("No response received from the bot. Please try again.")
+                    return
+                
+                print("\n=== Extracted Data ===")
+                print(f"LLM Response: {llm_response}")
+                print(f"Display Results: {display_results}")
+                
+                # Add assistant response to chat
+                st.session_state.messages.append({"role": "assistant", "content": llm_response})
+                st.markdown(llm_response)
+                
+                # Display the retrieved context items
+                if display_results:
+                    st.write("### Related Content:")
+                    for item in display_results:
+                        with st.expander(f"Source: {item.get('filename', 'Unknown')}"):
+                            # If it's an image, display it
+                            if item.get('type') == 'image':
+                                if item.get('path'):
+                                    st.image(item['path'], caption=item.get('description', 'No description available'))
+                                else:
+                                    st.write("Image path not available")
+                            # If it's text, display the description
+                            else:
+                                st.write(item.get('description', 'No description available'))
+                            
+                            # Display keywords if available
+                            if item.get('keywords'):
+                                st.write("**Keywords:** ", item['keywords'])
+                            
+                            # Display similarity score if available
+                            if item.get('similarity_score') is not None:
+                                st.write(f"**Similarity Score:** {item['similarity_score']:.2f}")
+                
+                # Update conversation history
+                st.session_state.conversation_history.append(
+                    {"role": "user", "content": prompt}
+                )
+                st.session_state.conversation_history.append(
+                    {"role": "assistant", "content": llm_response}
+                )
+                
+    except Exception as e:
+        error_msg = f"Error: {str(e)}"
+        st.error(error_msg)
+        st.session_state.conversation_history.extend([
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": error_msg}
+        ])
 
 def display_chat_history(container):
-    """Display all messages in the chat history."""
-    with container:
-        for message in st.session_state.conversation_history:
-            with st.chat_message(message["role"]):
-                st.write(message["content"])
+    """Display chat history with improved formatting."""
+    for message in st.session_state.conversation_history:
+        role = message["role"]
+        content = message["content"]
+        
+        if role == "user":
+            container.write(f"You: {content}")
+        else:
+            container.write(f"Bot: {content}")
+        container.write("---")
 
 def clear_input():
     """Clear the input field after submission."""
     st.session_state["user_input"] = st.session_state["widget"]
     st.session_state["widget"] = ""
+
+def display_chat_messages():
+    """Display chat messages with icons."""
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"], avatar="👤" if message["role"] == "user" else "☕"):
+            st.markdown(message["content"])
 
 # --- Main Application ---
 def main():
@@ -185,6 +331,9 @@ def main():
                         st.error("Incorrect password!")
             if st.session_state.is_admin:
                 show_admin_features()
+                if st.button("Clear Chat History"):
+                    clear_chat()
+                    st.rerun()
 
     # Header
     st.image('static/images/Coffee_shop.jpg', use_container_width=True)
@@ -195,24 +344,95 @@ def main():
     initialize_chat_history()
     chat_container = st.container()
     
-    # Text input for the chat interface with callback to clear input
-    _user_input = st.text_input(
-        INPUT_PLACEHOLDER,
-        key="widget",
-        on_change=clear_input,
-        placeholder="Type your question here..."
-    )
-    
-    # Process user query if there is input stored in session state
-    if st.session_state.get("user_input"):
-        _, st.session_state.conversation_history = generate_response(
-            st.session_state["user_input"],
-            st.session_state.conversation_history,
-        )
-        st.session_state["user_input"] = ""
-    
-    # Display chat history
-    display_chat_history(chat_container)
+    # Display chat messages
+    display_chat_messages()
+
+    # Chat input
+    if prompt := st.chat_input("Ask me anything about coffee making! ☕"):
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(prompt)
+
+        # Add assistant response
+        with st.chat_message("assistant", avatar="☕"):
+            try:
+                # Get conversation history in the format expected by the API
+                history = [
+                    {"role": msg["role"], "content": msg["content"]}
+                    for msg in st.session_state.conversation_history[-5:]  # Only use last 5 messages
+                ]
+
+                # Make API request
+                response = requests.post(
+                    API_CONFIG["BARISTA_URL"],
+                    json={"query": prompt, "history": history},
+                    timeout=600
+                )
+                
+                print("\n=== API Response ===")
+                print(f"Status Code: {response.status_code}")
+                print(f"Raw Response: {response.text}")
+                
+                if response.status_code == 200:
+                    response_data = response.json()
+                    print("\n=== Parsed Response Data ===")
+                    print(f"Full response_data: {response_data}")
+                    
+                    # Extract LLM response and display results from the correct structure
+                    llm_response = response_data.get("response", {}).get("llm_response")
+                    display_results = response_data.get("response", {}).get("display_results", [])
+                    
+                    if not llm_response:
+                        st.error("No response received from the bot. Please try again.")
+                        return
+                    
+                    print("\n=== Extracted Data ===")
+                    print(f"LLM Response: {llm_response}")
+                    print(f"Display Results: {display_results}")
+                    
+                    # Add assistant response to chat
+                    st.session_state.messages.append({"role": "assistant", "content": llm_response})
+                    st.markdown(llm_response)
+                    
+                    # Display the retrieved context items
+                    if display_results:
+                        st.write("### Related Content:")
+                        for item in display_results:
+                            with st.expander(f"Source: {item.get('filename', 'Unknown')}"):
+                                # If it's an image, display it
+                                if item.get('type') == 'image':
+                                    if item.get('path'):
+                                        st.image(item['path'], caption=item.get('description', 'No description available'))
+                                    else:
+                                        st.write("Image path not available")
+                                # If it's text, display the description
+                                else:
+                                    st.write(item.get('description', 'No description available'))
+                                
+                                # Display keywords if available
+                                if item.get('keywords'):
+                                    st.write("**Keywords:** ", item['keywords'])
+                                
+                                # Display similarity score if available
+                                if item.get('similarity_score') is not None:
+                                    st.write(f"**Similarity Score:** {item['similarity_score']:.2f}")
+                    
+                    # Update conversation history
+                    st.session_state.conversation_history.append(
+                        {"role": "user", "content": prompt}
+                    )
+                    st.session_state.conversation_history.append(
+                        {"role": "assistant", "content": llm_response}
+                    )
+                    
+            except Exception as e:
+                error_msg = f"Error: {str(e)}"
+                st.error(error_msg)
+                st.session_state.conversation_history.extend([
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": error_msg}
+                ])
 
 if __name__ == "__main__":
     main()

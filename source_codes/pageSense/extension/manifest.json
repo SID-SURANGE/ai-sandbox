@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "PageSense Semantic Search",
+  "version": "0.1",
+  "description": "Semantic search over Chrome history and bookmarks.",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "permissions": [
+    "storage",
+    "bookmarks",
+    "history",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ]
+}
