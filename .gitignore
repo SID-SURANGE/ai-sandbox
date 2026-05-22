@@ -83,6 +83,13 @@ dmypy.json
 # Logs and databases
 *.log
 *.sqlite
+errors.txt
+
+# Editor / OS junk
+* copy.py
+* copy.*
+.DS_Store
+Thumbs.db
 
 # Image data
 data/
@@ -90,9 +97,6 @@ data/
 # data folder in pageSense
 source_codes/pageSense/qdrant_data
 
-# data folder in image captioning
-source_codes/image-captioning/data
-
-# data folder in multimodal-rag
-source_codes/multimodal-rag/data
+# data folder in archived multimodal-rag
+archive/multimodal-rag/data
 

@@ -38,7 +38,7 @@
 
 1. <b>Clone the repository</b>
    ```sh
-   git clone https://github.com/YourOrg/AI-Sandbox.git
+   git clone https://github.com/SID-SURANGE/AI-Sandbox.git
    cd AI-Sandbox/source_codes/pageSense/extension
    ```
 2. <b>Load the extension in Chrome</b>
